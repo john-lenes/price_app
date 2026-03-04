@@ -1,0 +1,129 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Price Monitor — Docker Compose
+# Services: db · redis · backend · celery-worker · celery-beat · flower · frontend
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-backend-common: &backend-common
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-price_monitor}
+      POSTGRES_USER: ${POSTGRES_USER:-price_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-price_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-price_user} -d ${POSTGRES_DB:-price_monitor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379"
+
+  # ── FastAPI Backend ─────────────────────────────────────────────────────────
+  backend:
+    <<: *backend-common
+    command: >
+      sh -c "
+        echo 'Running Alembic migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting Uvicorn...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8020 --workers 2
+      "
+    ports:
+      - "8020:8020"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Celery Worker ───────────────────────────────────────────────────────────
+  celery-worker:
+    <<: *backend-common
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=celery
+      --hostname=worker@%h
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app.celery_app inspect ping --timeout 10 2>/dev/null || exit 1"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 45s
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Celery Beat (Scheduler) ─────────────────────────────────────────────────
+  celery-beat:
+    <<: *backend-common
+    command: >
+      celery -A app.workers.celery_app.celery_app beat
+      --loglevel=info
+      --scheduler celery.beat:PersistentScheduler
+      --schedule /tmp/celerybeat-schedule
+    depends_on:
+      celery-worker:
+        condition: service_healthy
+
+  # ── Flower (Celery monitoring UI) ───────────────────────────────────────────
+  flower:
+    <<: *backend-common
+    command: >
+      celery -A app.workers.celery_app.celery_app flower
+      --port=5555
+      --url_prefix=flower
+    ports:
+      - "5555:5555"
+    depends_on:
+      - celery-worker
+
+  # ── React Frontend (served by Nginx) ────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3010:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
