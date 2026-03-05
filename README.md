@@ -13,8 +13,8 @@ Um sistema pronto para produção que rastreia preços de produtos de e-commerce
 │  ┌──────────┐    ┌──────────────┐    ┌──────────────────────┐  │
 │  │ Frontend │    │   FastAPI    │    │  PostgreSQL (db)      │  │
 │  │  React   │───▶│  Backend     │───▶│  (produtos, preços,  │  │
-│  │  Nginx   │    │  :8000       │    │   usuários, alertas) │  │
-│  │  :80     │    └──────┬───────┘    └──────────────────────┘  │
+│  │  Nginx   │    │  :8020       │    │   usuários, alertas) │  │
+│  │  :3010   │    └──────┬───────┘    └──────────────────────┘  │
 │  └──────────┘           │                                       │
 │                         ▼                                       │
 │                  ┌──────────────┐    ┌──────────────────────┐  │
@@ -110,7 +110,7 @@ price_app/
 ### 1. Clonar e configurar variáveis de ambiente
 
 ```bash
-git clone <seu-repo> price_app
+git clone https://github.com/john-lenes/price_app.git
 cd price_app
 
 # Criar arquivo .env a partir do exemplo
@@ -133,14 +133,19 @@ Aguarde alguns segundos enquanto os containers inicializam. O backend executa as
 
 | Serviço | URL |
 |---|---|
-| **Frontend (React)** | http://localhost |
+| **Frontend (React)** | http://localhost:3010 |
 | **API (FastAPI)** | http://localhost:8020 |
 | **Swagger UI** | http://localhost:8020/docs |
+| **Redoc** | http://localhost:8020/redoc |
 | **Flower (Celery)** | http://localhost:5555 |
 
 ### 4. Criar seu primeiro usuário
 
-Acesse http://localhost, clique em **Criar conta** e preencha seus dados.
+Acesse http://localhost:3010, clique em **Criar conta** e preencha seus dados.
+
+> 💡 **Usuário de teste disponível:**
+> - **E-mail:** `teste@teste.com`
+> - **Senha:** `Teste@123`
 
 ---
 
@@ -293,11 +298,11 @@ Acesse http://localhost:5555 para visualizar:
 
 ## 🔒 Segurança
 
-- Senhas armazenadas com **bcrypt** (custo 12)
+- Senhas armazenadas com **bcrypt 4.0.1 + passlib 1.7.4** (custo 12)
 - Autenticação via **JWT** com expiração configurável
 - Usuário não-root nos containers Docker
 - Variáveis sensíveis via `.env` (nunca hardcoded)
-- CORS configurado explicitamente
+- CORS configurado explicitamente para `localhost:3010`
 
 ---
 
@@ -309,11 +314,22 @@ Veja [.env.example](.env.example) para a lista completa com descrições.
 
 ## 🤝 Contribuindo
 
-1. Fork o repositório
+1. Fork o repositório: https://github.com/john-lenes/price_app
 2. Crie uma branch: `git checkout -b feature/nova-funcionalidade`
 3. Commit: `git commit -m 'feat: adiciona nova funcionalidade'`
 4. Push: `git push origin feature/nova-funcionalidade`
 5. Abra um Pull Request
+
+---
+
+## 📋 Changelog
+
+### v1.0.0 — 05/03/2026
+- 🎉 Lançamento inicial com stack completo (FastAPI + React + Celery + PostgreSQL)
+- ✅ Frontend servido na porta **3010** via Nginx
+- ✅ API disponível na porta **8020**
+- 🔧 Fix: `bcrypt==4.0.1` fixado para compatibilidade com `passlib 1.7.4`
+- 🔧 Fix: removido `broker_connection_retry` depreciado do Celery
 
 ---
 
